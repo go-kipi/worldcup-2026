@@ -24,7 +24,6 @@ func NewEmailService(cfg *config.Config, logger *zap.Logger) *EmailService {
 }
 
 func (s *EmailService) SendOTP(to, otp string) error {
-	// Check EMAIL_PROVIDER flag to determine which method to use
 	if s.cfg.EmailProvider == "sendgrid" {
 		if s.cfg.SendGridAPIKey == "" {
 			return fmt.Errorf("EMAIL_PROVIDER is set to 'sendgrid' but SENDGRID_API_KEY is not configured")
