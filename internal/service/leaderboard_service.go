@@ -1,15 +1,17 @@
 package service
 
 import (
+	"context"
 	"github.com/go-kipi/worldcup-2026/internal/models"
-	"gorm.io/gorm"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
 type LeaderboardService struct {
-	db *gorm.DB
+	db *mongo.Database
 }
 
-func NewLeaderboardService(db *gorm.DB) *LeaderboardService {
+func NewLeaderboardService(db *mongo.Database) *LeaderboardService {
 	return &LeaderboardService{db: db}
 }
 
@@ -22,21 +24,33 @@ type LeaderboardData struct {
 }
 
 func (s *LeaderboardService) GetLeaderboard() (*LeaderboardData, error) {
+	ctx := context.Background()
 	var data LeaderboardData
-	if err := s.db.Find(&data.Users).Error; err != nil {
-		return nil, err
+
+	cursor, err := s.db.Collection("users").Find(ctx, bson.M{})
+	if err == nil {
+		cursor.All(ctx, &data.Users)
 	}
-	if err := s.db.Find(&data.Matches).Error; err != nil {
-		return nil, err
+
+	cursor, err = s.db.Collection("matches").Find(ctx, bson.M{})
+	if err == nil {
+		cursor.All(ctx, &data.Matches)
 	}
-	if err := s.db.Find(&data.KnockoutSlots).Error; err != nil {
-		return nil, err
+
+	cursor, err = s.db.Collection("knockout_slots").Find(ctx, bson.M{})
+	if err == nil {
+		cursor.All(ctx, &data.KnockoutSlots)
 	}
-	if err := s.db.Find(&data.MatchPredictions).Error; err != nil {
-		return nil, err
+
+	cursor, err = s.db.Collection("match_predictions").Find(ctx, bson.M{})
+	if err == nil {
+		cursor.All(ctx, &data.MatchPredictions)
 	}
-	if err := s.db.Find(&data.KnockoutPredictions).Error; err != nil {
-		return nil, err
+
+	cursor, err = s.db.Collection("knockout_predictions").Find(ctx, bson.M{})
+	if err == nil {
+		cursor.All(ctx, &data.KnockoutPredictions)
 	}
+
 	return &data, nil
 }

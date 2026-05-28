@@ -20,7 +20,7 @@ func NewRouter(
 ) *gin.Engine {
 	r := gin.Default()
 
-	// CORS middleware could be added here
+	// CORS middleware... (existing code)
 	r.Use(func(c *gin.Context) {
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
@@ -62,6 +62,20 @@ func NewRouter(
 			protectedGroup.POST("/predictions", predictionHandler.SavePredictions)
 		}
 	}
+
+	// Serve static assets
+	r.Static("/assets", "./dist/assets")
+
+	// Serve favicon
+	r.StaticFile("/favicon.ico", "./dist/favicon.ico")
+
+	// Serve root index.html
+	r.StaticFile("/", "./dist/index.html")
+
+	// SPA fallback
+	r.NoRoute(func(c *gin.Context) {
+		c.File("./dist/index.html")
+	})
 
 	return r
 }

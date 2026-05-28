@@ -16,13 +16,10 @@ func NewGameHandler(gameService *service.GameService) *GameHandler {
 }
 
 func (h *GameHandler) GetAppState(c *gin.Context) {
-	userIdVal, exists := c.Get("user_id")
-	var userID uint
-	if exists {
-		userID = userIdVal.(uint)
-	}
+	userID, _ := c.Get("user_id")
+	userIDStr, _ := userID.(string)
 
-	state, err := h.gameService.GetAppState(userID)
+	state, err := h.gameService.GetAppState(userIDStr)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to load app state"})
 		return
@@ -38,10 +35,10 @@ func (h *GameHandler) UpdateMatch(c *gin.Context) {
 	}
 
 	var req struct {
-		ID        uint `json:"id"`
-		HomeScore *int `json:"home_score"`
-		AwayScore *int `json:"away_score"`
-		Finished  bool `json:"finished"`
+		ID        string `json:"id"`
+		HomeScore int    `json:"home_score"`
+		AwayScore int    `json:"away_score"`
+		Finished  bool   `json:"finished"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
@@ -63,7 +60,7 @@ func (h *GameHandler) UpdateKnockoutSlot(c *gin.Context) {
 	}
 
 	var req struct {
-		ID    uint                   `json:"id"`
+		ID    string                 `json:"id"`
 		Patch map[string]interface{} `json:"patch"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {

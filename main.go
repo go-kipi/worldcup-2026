@@ -52,6 +52,7 @@ func main() {
 		fx.Provide(
 			config.LoadConfig,
 			db.NewDatabase,
+			db.NewMongoDatabase,
 			newLogger,
 
 			service.NewAuthService,

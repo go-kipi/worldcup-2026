@@ -1,15 +1,18 @@
 package service
 
 import (
+	"context"
 	"github.com/go-kipi/worldcup-2026/internal/models"
-	"gorm.io/gorm"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 type GameService struct {
-	db *gorm.DB
+	db *mongo.Database
 }
 
-func NewGameService(db *gorm.DB) *GameService {
+func NewGameService(db *mongo.Database) *GameService {
 	return &GameService{db: db}
 }
 
@@ -22,42 +25,70 @@ type AppState struct {
 	KnockoutPredictions []models.KnockoutPrediction `json:"knockout_predictions"`
 }
 
-func (s *GameService) GetAppState(userID uint) (*AppState, error) {
+func (s *GameService) GetAppState(userID string) (*AppState, error) {
+	ctx := context.Background()
 	var state AppState
 
-	if err := s.db.Find(&state.Teams).Error; err != nil {
-		return nil, err
-	}
-	if err := s.db.Order("kickoff ASC").Find(&state.Matches).Error; err != nil {
-		return nil, err
-	}
-	if err := s.db.Order("id ASC").Find(&state.KnockoutSlots).Error; err != nil {
-		return nil, err
-	}
-	if err := s.db.First(&state.Settings, 1).Error; err != nil {
-		return nil, err
+	// Teams
+	cursor, err := s.db.Collection("teams").Find(ctx, bson.M{})
+	if err == nil {
+		cursor.All(ctx, &state.Teams)
 	}
 
-	if userID > 0 {
-		s.db.Where("user_id = ?", userID).Find(&state.MatchPredictions)
-		s.db.Where("user_id = ?", userID).Find(&state.KnockoutPredictions)
+	// Matches
+	opts := options.Find().SetSort(bson.M{"kickoff": 1})
+	cursor, err = s.db.Collection("matches").Find(ctx, bson.M{}, opts)
+	if err == nil {
+		cursor.All(ctx, &state.Matches)
+	}
+
+	// KnockoutSlots
+	opts = options.Find().SetSort(bson.M{"_id": 1})
+	cursor, err = s.db.Collection("knockout_slots").Find(ctx, bson.M{}, opts)
+	if err == nil {
+		cursor.All(ctx, &state.KnockoutSlots)
+	}
+
+	// Settings
+	s.db.Collection("app_settings").FindOne(ctx, bson.M{"_id": "1"}).Decode(&state.Settings)
+
+	// Predictions
+	if userID != "" {
+		cursor, err = s.db.Collection("match_predictions").Find(ctx, bson.M{"user_id": userID})
+		if err == nil {
+			cursor.All(ctx, &state.MatchPredictions)
+		}
+
+		cursor, err = s.db.Collection("knockout_predictions").Find(ctx, bson.M{"user_id": userID})
+		if err == nil {
+			cursor.All(ctx, &state.KnockoutPredictions)
+		}
 	}
 
 	return &state, nil
 }
 
-func (s *GameService) UpdateMatch(matchID uint, homeScore *int, awayScore *int, finished bool) error {
-	return s.db.Model(&models.Match{}).Where("id = ?", matchID).Updates(map[string]interface{}{
-		"home_score": homeScore,
-		"away_score": awayScore,
-		"finished":   finished,
-	}).Error
+func (s *GameService) UpdateMatch(matchID string, homeScore int, awayScore int, finished bool) error {
+	_, err := s.db.Collection("matches").UpdateOne(context.Background(), bson.M{"_id": matchID}, bson.M{
+		"$set": bson.M{
+			"home_score": homeScore,
+			"away_score": awayScore,
+			"finished":   finished,
+		},
+	})
+	return err
 }
 
-func (s *GameService) UpdateKnockoutSlot(slotID uint, patch map[string]interface{}) error {
-	return s.db.Model(&models.KnockoutSlot{}).Where("id = ?", slotID).Updates(patch).Error
+func (s *GameService) UpdateKnockoutSlot(slotID string, patch map[string]interface{}) error {
+	_, err := s.db.Collection("knockout_slots").UpdateOne(context.Background(), bson.M{"_id": slotID}, bson.M{
+		"$set": patch,
+	})
+	return err
 }
 
 func (s *GameService) UpdateSettings(lockAt string) error {
-	return s.db.Model(&models.AppSetting{}).Where("id = 1").Update("lock_at", lockAt).Error
+	_, err := s.db.Collection("app_settings").UpdateOne(context.Background(), bson.M{"_id": "1"}, bson.M{
+		"$set": bson.M{"lock_at": lockAt},
+	})
+	return err
 }

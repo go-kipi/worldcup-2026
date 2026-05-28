@@ -9,13 +9,13 @@ import (
 )
 
 type Claims struct {
-	UserID uint   `json:"user_id"`
+	UserID string `json:"user_id"`
 	Email  string `json:"email"`
 	Role   string `json:"role"`
 	jwt.RegisteredClaims
 }
 
-func GenerateToken(userID uint, email, role string, cfg *config.Config) (string, error) {
+func GenerateToken(userID string, email, role string, cfg *config.Config) (string, error) {
 	expirationTime := time.Now().Add(24 * time.Hour * 45) // 45 days
 	claims := &Claims{
 		UserID: userID,

@@ -1,50 +1,58 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"time"
 
 	"github.com/go-kipi/worldcup-2026/internal/models"
-	"gorm.io/gorm"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 type PredictionService struct {
-	db *gorm.DB
+	db *mongo.Database
 }
 
-func NewPredictionService(db *gorm.DB) *PredictionService {
+func NewPredictionService(db *mongo.Database) *PredictionService {
 	return &PredictionService{db: db}
 }
 
-func (s *PredictionService) GetUserPredictions(userID uint) ([]models.MatchPrediction, []models.KnockoutPrediction, error) {
+func (s *PredictionService) GetUserPredictions(userID string) ([]models.MatchPrediction, []models.KnockoutPrediction, error) {
+	ctx := context.Background()
 	var matchPreds []models.MatchPrediction
-	if err := s.db.Where("user_id = ?", userID).Find(&matchPreds).Error; err != nil {
-		return nil, nil, err
+	cursor, err := s.db.Collection("match_predictions").Find(ctx, bson.M{"user_id": userID})
+	if err == nil {
+		cursor.All(ctx, &matchPreds)
 	}
 
 	var koPreds []models.KnockoutPrediction
-	if err := s.db.Where("user_id = ?", userID).Find(&koPreds).Error; err != nil {
-		return nil, nil, err
+	cursor, err = s.db.Collection("knockout_predictions").Find(ctx, bson.M{"user_id": userID})
+	if err == nil {
+		cursor.All(ctx, &koPreds)
 	}
 
 	return matchPreds, koPreds, nil
 }
 
 type MatchPredictionInput struct {
-	MatchID   uint `json:"match_id" binding:"required"`
-	HomeScore int  `json:"home_score"`
-	AwayScore int  `json:"away_score"`
+	MatchID   string `json:"match_id" binding:"required"`
+	HomeScore int    `json:"home_score"`
+	AwayScore int    `json:"away_score"`
 }
 
 type KnockoutPredictionInput struct {
-	SlotID    uint `json:"slot_id" binding:"required"`
-	HomeScore int  `json:"home_score"`
-	AwayScore int  `json:"away_score"`
+	SlotID    string `json:"slot_id" binding:"required"`
+	HomeScore int    `json:"home_score"`
+	AwayScore int    `json:"away_score"`
 }
 
-func (s *PredictionService) SavePredictions(userID uint, matchPreds []MatchPredictionInput, koPreds []KnockoutPredictionInput) error {
+func (s *PredictionService) SavePredictions(userID string, matchPreds []MatchPredictionInput, koPreds []KnockoutPredictionInput) error {
+	ctx := context.Background()
 	var settings models.AppSetting
-	if err := s.db.First(&settings, 1).Error; err != nil {
+	err := s.db.Collection("app_settings").FindOne(ctx, bson.M{"_id": "1"}).Decode(&settings)
+	if err != nil {
 		return errors.New("system settings not found")
 	}
 
@@ -52,35 +60,39 @@ func (s *PredictionService) SavePredictions(userID uint, matchPreds []MatchPredi
 		return errors.New("predictions are closed (past cutoff)")
 	}
 
-	return s.db.Transaction(func(tx *gorm.DB) error {
-		// Insert new predictions
-		for _, mp := range matchPreds {
-			pred := models.MatchPrediction{
-				UserID:    userID,
-				MatchID:   mp.MatchID,
-				HomeScore: mp.HomeScore,
-				AwayScore: mp.AwayScore,
-			}
-			// Upsert logic for MatchPrediction
-			if err := tx.Where(models.MatchPrediction{UserID: userID, MatchID: mp.MatchID}).Assign(pred).FirstOrCreate(&pred).Error; err != nil {
-				return err
-			}
+	// upsert match predictions
+	for _, mp := range matchPreds {
+		filter := bson.M{"user_id": userID, "match_id": mp.MatchID}
+		update := bson.M{
+			"$set": bson.M{
+				"home_score": mp.HomeScore,
+				"away_score": mp.AwayScore,
+				"updated_at": time.Now(),
+			},
 		}
-
-		for _, kp := range koPreds {
-			h, a := kp.HomeScore, kp.AwayScore
-			pred := models.KnockoutPrediction{
-				UserID:    userID,
-				SlotID:    kp.SlotID,
-				HomeScore: &h,
-				AwayScore: &a,
-			}
-			// Upsert logic for KnockoutPrediction
-			if err := tx.Where(models.KnockoutPrediction{UserID: userID, SlotID: kp.SlotID}).Assign(pred).FirstOrCreate(&pred).Error; err != nil {
-				return err
-			}
+		opts := options.UpdateOne().SetUpsert(true)
+		_, err := s.db.Collection("match_predictions").UpdateOne(ctx, filter, update, opts)
+		if err != nil {
+			return err
 		}
+	}
 
-		return nil
-	})
+	// upsert knockout predictions
+	for _, kp := range koPreds {
+		filter := bson.M{"user_id": userID, "slot_id": kp.SlotID}
+		update := bson.M{
+			"$set": bson.M{
+				"home_score": kp.HomeScore,
+				"away_score": kp.AwayScore,
+				"updated_at": time.Now(),
+			},
+		}
+		opts := options.UpdateOne().SetUpsert(true)
+		_, err := s.db.Collection("knockout_predictions").UpdateOne(ctx, filter, update, opts)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

@@ -17,6 +17,8 @@ type Config struct {
 	SMTPPassword   string
 	SendGridAPIKey string
 	EmailProvider  string // "smtp" or "sendgrid"
+	MongoURI       string
+	MongoDBName    string
 }
 
 func LoadConfig() (*Config, error) {
@@ -57,5 +59,7 @@ func LoadConfig() (*Config, error) {
 		SMTPPassword:   os.Getenv("SMTP_PASSWORD"),
 		SendGridAPIKey: os.Getenv("SENDGRID_API_KEY"),
 		EmailProvider:  emailProvider,
+		MongoURI:       os.Getenv("MONGO_URI"),
+		MongoDBName:    os.Getenv("MONGO_DB_NAME"),
 	}, nil
 }

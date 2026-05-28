@@ -16,14 +16,14 @@ func NewPredictionHandler(predictionService *service.PredictionService) *Predict
 }
 
 func (h *PredictionHandler) GetPredictions(c *gin.Context) {
-	userIdVal, exists := c.Get("user_id")
+	userID, exists := c.Get("user_id")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
 
-	userID := userIdVal.(uint)
-	matches, knockouts, err := h.predictionService.GetUserPredictions(userID)
+	userIDStr, _ := userID.(string)
+	matches, knockouts, err := h.predictionService.GetUserPredictions(userIDStr)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to load predictions"})
 		return
@@ -41,12 +41,12 @@ type savePredictionsRequest struct {
 }
 
 func (h *PredictionHandler) SavePredictions(c *gin.Context) {
-	userIdVal, exists := c.Get("user_id")
+	userID, exists := c.Get("user_id")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
-	userID := userIdVal.(uint)
+	userIDStr, _ := userID.(string)
 
 	var req savePredictionsRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -54,7 +54,7 @@ func (h *PredictionHandler) SavePredictions(c *gin.Context) {
 		return
 	}
 
-	if err := h.predictionService.SavePredictions(userID, req.MatchPredictions, req.KnockoutPredictions); err != nil {
+	if err := h.predictionService.SavePredictions(userIDStr, req.MatchPredictions, req.KnockoutPredictions); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}

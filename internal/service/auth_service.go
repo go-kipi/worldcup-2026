@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"crypto/rand"
 	"errors"
 	"log"
@@ -10,16 +11,18 @@ import (
 	"github.com/go-kipi/worldcup-2026/internal/config"
 	"github.com/go-kipi/worldcup-2026/internal/models"
 	"github.com/go-kipi/worldcup-2026/internal/pkg/jwtutil"
-	"gorm.io/gorm"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 type AuthService struct {
-	db    *gorm.DB
+	db    *mongo.Database
 	cfg   *config.Config
 	email *EmailService
 }
 
-func NewAuthService(db *gorm.DB, cfg *config.Config, email *EmailService) *AuthService {
+func NewAuthService(db *mongo.Database, cfg *config.Config, email *EmailService) *AuthService {
 	return &AuthService{db: db, cfg: cfg, email: email}
 }
 
@@ -31,10 +34,11 @@ func (s *AuthService) SendOTP(email string) error {
 		Email:     email,
 		Code:      otp,
 		ExpiresAt: time.Now().Add(10 * time.Minute),
+		CreatedAt: time.Now(),
 	}
 
-	// Optional: invalidate old OTPs for this email, but for simplicity we'll just insert a new one
-	if err := s.db.Create(&otpRecord).Error; err != nil {
+	_, err := s.db.Collection("otps").InsertOne(context.Background(), otpRecord)
+	if err != nil {
 		return err
 	}
 
@@ -51,25 +55,41 @@ func (s *AuthService) SendOTP(email string) error {
 
 func (s *AuthService) VerifyOTP(email, code string) (string, error) {
 	var otp models.OTP
-	err := s.db.Where("email = ? AND code = ? AND expires_at > ?", email, code, time.Now()).Order("created_at desc").First(&otp).Error
+	filter := bson.M{
+		"email":      email,
+		"code":       code,
+		"expires_at": bson.M{"$gt": time.Now()},
+	}
+	opts := options.FindOne().SetSort(bson.M{"created_at": -1})
+	err := s.db.Collection("otps").FindOne(context.Background(), filter, opts).Decode(&otp)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errors.Is(err, mongo.ErrNoDocuments) {
 			return "", errors.New("invalid or expired OTP")
 		}
 		return "", err
 	}
 
 	// Invalidate the OTP so it can't be used again
-	s.db.Delete(&otp)
+	s.db.Collection("otps").DeleteOne(context.Background(), bson.M{"_id": otp.ID})
 
 	// Fetch or create the user
 	var user models.User
-	err = s.db.Where("email = ?", email).First(&user).Error
-	if err != nil && errors.Is(err, gorm.ErrRecordNotFound) {
-		// Create new user, optionally check if total count < 11 to enforce limits
-		user = models.User{Email: email, Name: email, Role: "user"} // basic setup
-		if err = s.db.Create(&user).Error; err != nil {
+	err = s.db.Collection("users").FindOne(context.Background(), bson.M{"email": email}).Decode(&user)
+	if err != nil && errors.Is(err, mongo.ErrNoDocuments) {
+		// Create new user
+		user = models.User{
+			Email:     email,
+			Name:      email,
+			Role:      "user",
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+		}
+		res, err := s.db.Collection("users").InsertOne(context.Background(), user)
+		if err != nil {
 			return "", err
+		}
+		if oid, ok := res.InsertedID.(bson.ObjectID); ok {
+			user.ID = oid.Hex()
 		}
 	} else if err != nil {
 		return "", err
