@@ -7,23 +7,6 @@ steps:
   - name: 'gcr.io/cloud-builders/docker'
     args: ['push', 'gcr.io/$PROJECT_ID/worldcup-2026:$COMMIT_SHA']
 
-  # 3. Deploy to Cloud Run
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    entrypoint: gcloud
-    args:
-      - 'run'
-      - 'deploy'
-      - 'worldcup-2026'
-      - '--image'
-      - 'gcr.io/$PROJECT_ID/worldcup-2026:$COMMIT_SHA'
-      - '--region'
-      - 'us-central1' # Change to your preferred region
-      - '--platform'
-      - 'managed'
-      - '--allow-unauthenticated'
-      - '--set-env-vars'
-      - 'MONGO_URI=mongodb://root:developer2021!@localhost:27017/,SMTP_HOST=smtp.gmail.com,SMTP_PASSWORD=XX,SMTP_PORT=587,SMTP_USER=XXXX@gmail.com,MONGO_DB_NAME=worldcup2026'
-
 images:
   - 'gcr.io/$PROJECT_ID/worldcup-2026:$COMMIT_SHA'
 
