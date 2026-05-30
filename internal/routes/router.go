@@ -65,6 +65,7 @@ func NewRouter(
 
 	// Serve static assets
 	r.Static("/assets", "./dist/assets")
+	r.Static("/public", "./dist/public")
 
 	// Serve favicon
 	r.StaticFile("/favicon.ico", "./dist/favicon.ico")

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log"
 	"math/big"
+	"strings"
 	"time"
 
 	"github.com/go-kipi/worldcup-2026/internal/config"
@@ -26,7 +27,35 @@ func NewAuthService(db *mongo.Database, cfg *config.Config, email *EmailService)
 	return &AuthService{db: db, cfg: cfg, email: email}
 }
 
+func (s *AuthService) VerifyUserOrDomain(email string) error {
+	ctx := context.Background()
+
+	// 1. Check if specific email is allowed
+	count, err := s.db.Collection("allowed_users").CountDocuments(ctx, bson.M{"email": email})
+	if err == nil && count > 0 {
+		return nil
+	}
+
+	// 2. Check if domain is allowed
+	parts := strings.Split(email, "@")
+	if len(parts) == 2 {
+		domain := parts[1]
+		count, err = s.db.Collection("allowed_domains").CountDocuments(ctx, bson.M{
+			"domain": bson.M{"$in": []string{domain, "@" + domain}},
+		})
+		if err == nil && count > 0 {
+			return nil
+		}
+	}
+
+	return errors.New("email or domain not authorized")
+}
+
 func (s *AuthService) SendOTP(email string) error {
+	if err := s.VerifyUserOrDomain(email); err != nil {
+		return err
+	}
+
 	otp := generateOTP(6)
 
 	// Create or reuse an OTP record

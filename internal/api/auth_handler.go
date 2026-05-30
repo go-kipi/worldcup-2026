@@ -29,6 +29,10 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	if err := h.authService.SendOTP(req.Email); err != nil {
 		log.Printf("Failed to send OTP to %s: %v", req.Email, err)
+		if err.Error() == "email or domain not authorized" {
+			c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to send OTP"})
 		return
 	}
