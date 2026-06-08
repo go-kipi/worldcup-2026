@@ -53,6 +53,7 @@ type KnockoutSlot struct {
 	ActualAwayTeam *string    `json:"actual_away_team" bson:"actual_away_team"`
 	HomeScore      int        `json:"home_score" bson:"home_score"`
 	AwayScore      int        `json:"away_score" bson:"away_score"`
+	Finished       bool       `gorm:"default:false" json:"finished" bson:"finished"`
 }
 
 type MatchPrediction struct {
